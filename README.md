@@ -1,4 +1,4 @@
-# TCP Tunneling: a language battle
+# TCP forwarding: a language battle
 
 This repository contains the implementations of the same program in different languages/frameworks. The goal is simple: programming fun. I found this simple "problem" and it has some complications making it just difficult enough to hit the rougher edges of a language (or framework).
 
