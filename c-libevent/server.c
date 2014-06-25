@@ -83,9 +83,9 @@ static void set_tcp_no_delay(evutil_socket_t fd)
 }
 
 
-static void pipe_error(struct bufferevent *bev, short error, void *ctx);
-static void initial_read(struct bufferevent *bev, void *ctx);
-
+/**
+ * active pipe
+ */
 static void pipe_read(struct bufferevent *bev, void *ctx) {
 	struct otherside* con = ctx;
 	if (con->bev) {
@@ -96,6 +96,42 @@ static void pipe_read(struct bufferevent *bev, void *ctx) {
 		evbuffer_drain(bufferevent_get_input(bev), SIZE_MAX);
 	}
 }
+
+static void pipe_error(struct bufferevent *bev, short error, void *ctx)
+{
+	struct otherside* con = ctx;
+    if (error & BEV_EVENT_TIMEOUT) {
+		/* re-enable reading and writing to detect future timeouts */
+        bufferevent_enable(bev, EV_READ|EV_WRITE);
+		if (con->bev) {
+			con->pair->other_timedout = 1;
+			if (!con->other_timedout) {
+				/* 
+				 * the other side didn't time-out yet, let's just flag our timeout
+				 */
+				return;
+			}
+		}
+    }
+    bufferevent_free(bev);
+	if (con->bev) {
+		/*
+		 let the back connection (whichever direction) finish writing it's buffers.
+		 But then timeout, but make sure the ctx is changed to avoid writing stuff to a
+		 freed buffer.
+		 */
+		struct timeval ones = { 1, 0};
+		bufferevent_set_timeouts(con->bev, &ones, &ones);
+        bufferevent_enable(con->bev, EV_READ|EV_WRITE);
+		con->pair->pair = NULL;
+		con->pair->bev = NULL;
+	}
+	free(con);
+}
+
+/**
+ * back connection handshake
+ */
 
 static struct otherside** create_contexts(struct bufferevent *forward, struct bufferevent *backward) {
 	struct otherside **result = calloc(2, sizeof(struct otherside*));
@@ -138,6 +174,7 @@ static void back_connection(struct bufferevent *bev, short events, void *ctx)
 		}
     }
 }
+
 static void create_pipe(struct event_base *base, struct bufferevent *other_side, uint32_t port) {
     struct bufferevent *bev;
     struct sockaddr_in sin;
@@ -160,50 +197,9 @@ static void create_pipe(struct event_base *base, struct bufferevent *other_side,
     }
 }
 
-
-
-static void initial_error(struct bufferevent *bev, short error, void *ctx) {
-    if (error & BEV_EVENT_TIMEOUT) {
-		/* nothing received so must be a ssh client */
-		printf("Nothing received, timeout, assuming ssh\n");
-		initial_read(bev, ctx);
-		return;
-    }
-    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
-    bufferevent_free(bev);
-}
-
-static void pipe_error(struct bufferevent *bev, short error, void *ctx)
-{
-	struct otherside* con = ctx;
-    if (error & BEV_EVENT_TIMEOUT) {
-		/* re-enable reading and writing to detect future timeouts */
-        bufferevent_enable(bev, EV_READ|EV_WRITE);
-		if (con->bev) {
-			con->pair->other_timedout = 1;
-			if (!con->other_timedout) {
-				/* 
-				 * the other side didn't time-out yet, let's just flag our timeout
-				 */
-				return;
-			}
-		}
-    }
-    bufferevent_free(bev);
-	if (con->bev) {
-		/*
-		 let the back connection (whichever direction) finish writing it's buffers.
-		 But then timeout, but make sure the ctx is changed to avoid writing stuff to a
-		 freed buffer.
-		 */
-		struct timeval ones = { 1, 0};
-		bufferevent_set_timeouts(con->bev, &ones, &ones);
-        bufferevent_enable(con->bev, EV_READ|EV_WRITE);
-		con->pair->pair = NULL;
-		con->pair->bev = NULL;
-	}
-	free(con);
-}
+/**
+ * Initial hand shake callbacks
+ */
 
 static void initial_read(struct bufferevent *bev, void *ctx) {
  	struct event_base *base = ctx;
@@ -224,6 +220,17 @@ static void initial_read(struct bufferevent *bev, void *ctx) {
 	bufferevent_set_timeouts(bev, NULL, NULL);
     bufferevent_setcb(bev, NULL, NULL, pipe_error, NULL);
 	create_pipe(base, bev, port);
+}
+
+static void initial_error(struct bufferevent *bev, short error, void *ctx) {
+    if (error & BEV_EVENT_TIMEOUT) {
+		/* nothing received so must be a ssh client */
+		printf("Nothing received, timeout, assuming ssh\n");
+		initial_read(bev, ctx);
+		return;
+    }
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    bufferevent_free(bev);
 }
 
 /* a new connection arrives */
