@@ -20,7 +20,6 @@ function httpsSshSwitch(conn) {
 	var sshServer = setTimeout(function() {
 		allreadyPiped = true;
 		var proxy = net.createConnection(22, function() {
-		//var proxy = net.createConnection(22, "192.168.3.11", function() {
 			conn.pipe(proxy).pipe(conn);
 		});
 	}, 2000);
