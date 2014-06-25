@@ -30,14 +30,14 @@
  * Every new connection goes through the following state machine/life cycle:
  * 
  * --- Initial "handshake" ---
- * do_accept: new connection on EXT_PORT
+ * initial_accept: new connection on EXT_PORT
  *    create a new buffer event and start waiting for the first data or a
  *    timeout
  *
  * initial_read: new connection send some data
  *    check the first byte and create pipe to either SSH_PORT or SSL_PORT
  *
- * initial_errorcb: new connection failed or timed-out
+ * initial_error: new connection failed or timed-out
  *    in case of a timeout, create pipe to SSH_PORT
  *    else close the buffer event
  *
@@ -46,18 +46,18 @@
  * create_pipe: 
  *     open connection to either SSH_PORT or SSL_PORT
  *
- * event_back_connection: the back connection was established or failed
+ * back_connection: the back connection was established or failed
  *     if everything went fine, connect the two buffer events in a 2-way pipe.
  *     else close both buffer events to make sure the front connection is also
  *     terminated 
  *
  * --- active pipe ---
  *
- * do_pipe: new data is available
+ * pipe_read: new data is available
  *      if the other side is still active, copy data from source to target
  *      else if other side is closed, just drain the buffer
  *
- * errorcb: something went wrong in one direction of the pipe
+ * pipe_error: something went wrong in one direction of the pipe
  *      if there was a timeout in reading or writing and we are the first
  *      direction of the pipe to notice this, do nothing.
  *      if there was a timeout and the other direction also had a timeout, we
@@ -83,10 +83,10 @@ static void set_tcp_no_delay(evutil_socket_t fd)
 }
 
 
-static void errorcb(struct bufferevent *bev, short error, void *ctx);
+static void pipe_error(struct bufferevent *bev, short error, void *ctx);
 static void initial_read(struct bufferevent *bev, void *ctx);
 
-static void do_pipe(struct bufferevent *bev, void *ctx) {
+static void pipe_read(struct bufferevent *bev, void *ctx) {
 	struct otherside* con = ctx;
 	if (con->bev) {
 		con->pair->other_timedout = 0;
@@ -110,7 +110,7 @@ static struct otherside** create_contexts(struct bufferevent *forward, struct bu
 	return result;
 }
 
-static void event_back_connection(struct bufferevent *bev, short events, void *ctx)
+static void back_connection(struct bufferevent *bev, short events, void *ctx)
 {
 	struct bufferevent* other_side = ctx;
     if (events & BEV_EVENT_CONNECTED) {
@@ -122,9 +122,9 @@ static void event_back_connection(struct bufferevent *bev, short events, void *c
     	bufferevent_enable(other_side, EV_READ|EV_WRITE);
 		/* pipe already available data to backend */
 		bufferevent_read_buffer(other_side, bufferevent_get_output(bev));
-        bufferevent_setcb(other_side, do_pipe, NULL, errorcb, ctxs[0]);
+        bufferevent_setcb(other_side, pipe_read, NULL, pipe_error, ctxs[0]);
 
-        bufferevent_setcb(bev, do_pipe, NULL, errorcb, ctxs[1]);
+        bufferevent_setcb(bev, pipe_read, NULL, pipe_error, ctxs[1]);
         bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
         bufferevent_enable(bev, EV_READ|EV_WRITE);
 
@@ -149,7 +149,7 @@ static void create_pipe(struct event_base *base, struct bufferevent *other_side,
 
     bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
 
-    bufferevent_setcb(bev, NULL, NULL, event_back_connection, other_side);
+    bufferevent_setcb(bev, NULL, NULL, back_connection, other_side);
 
     if (bufferevent_socket_connect(bev, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         /* Error starting connection */
@@ -162,7 +162,7 @@ static void create_pipe(struct event_base *base, struct bufferevent *other_side,
 
 
 
-static void initial_errorcb(struct bufferevent *bev, short error, void *ctx) {
+static void initial_error(struct bufferevent *bev, short error, void *ctx) {
     if (error & BEV_EVENT_TIMEOUT) {
 		/* nothing received so must be a ssh client */
 		printf("Nothing received, timeout, assuming ssh\n");
@@ -173,7 +173,7 @@ static void initial_errorcb(struct bufferevent *bev, short error, void *ctx) {
     bufferevent_free(bev);
 }
 
-static void errorcb(struct bufferevent *bev, short error, void *ctx)
+static void pipe_error(struct bufferevent *bev, short error, void *ctx)
 {
 	struct otherside* con = ctx;
     if (error & BEV_EVENT_TIMEOUT) {
@@ -222,12 +222,12 @@ static void initial_read(struct bufferevent *bev, void *ctx) {
     bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
     bufferevent_disable(bev, EV_READ|EV_WRITE);
 	bufferevent_set_timeouts(bev, NULL, NULL);
-    bufferevent_setcb(bev, NULL, NULL, errorcb, NULL);
+    bufferevent_setcb(bev, NULL, NULL, pipe_error, NULL);
 	create_pipe(base, bev, port);
 }
 
 /* a new connection arrives */
-static void do_accept(evutil_socket_t listener, short UNUSED(event), void *arg)
+static void initial_accept(evutil_socket_t listener, short UNUSED(event), void *arg)
 {
     struct event_base *base = arg;
     struct sockaddr_storage ss;
@@ -241,7 +241,7 @@ static void do_accept(evutil_socket_t listener, short UNUSED(event), void *arg)
         struct bufferevent *bev;
         evutil_make_socket_nonblocking(fd);
         bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-        bufferevent_setcb(bev, initial_read, NULL, initial_errorcb, base);
+        bufferevent_setcb(bev, initial_read, NULL, initial_error, base);
         bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
         bufferevent_enable(bev, EV_READ|EV_WRITE);
 		bufferevent_set_timeouts(bev, &SSH_TIMEOUT, NULL);
@@ -283,7 +283,7 @@ static void run(void)
         return;
     }
 
-    listener_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
+    listener_event = event_new(base, listener, EV_READ|EV_PERSIST, initial_accept, (void*)base);
 
     event_add(listener_event, NULL);
 
