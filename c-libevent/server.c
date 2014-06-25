@@ -78,8 +78,7 @@ struct otherside {
 static void set_tcp_no_delay(evutil_socket_t fd)
 {
 	int one = 1;
-	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
-		&one, sizeof one);
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
 }
 
 
@@ -255,8 +254,12 @@ static void initial_accept(evutil_socket_t listener, short UNUSED(event), void *
     }
 }
 
-static void run(void)
+
+int main(int UNUSED(c), char **v)
 {
+	(void)v;
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     evutil_socket_t listener;
     struct sockaddr_in sin;
     struct event_base *base;
@@ -264,7 +267,7 @@ static void run(void)
 
     base = event_base_new();
     if (!base)
-        return; 
+        return 1; 
 
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = 0;
@@ -282,12 +285,12 @@ static void run(void)
 
     if (bind(listener, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
         perror("bind");
-        return;
+        return 1;
     }
 
     if (listen(listener, 16)<0) {
         perror("listen");
-        return;
+        return 1;
     }
 
     listener_event = event_new(base, listener, EV_READ|EV_PERSIST, initial_accept, (void*)base);
@@ -295,14 +298,5 @@ static void run(void)
     event_add(listener_event, NULL);
 
     event_base_dispatch(base);
-}
-
-int
-main(int UNUSED(c), char **v)
-{
-	(void)v;
-    setvbuf(stdout, NULL, _IONBF, 0);
-
-    run();
     return 0;
 }
