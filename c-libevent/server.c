@@ -176,13 +176,7 @@ static void initial_errorcb(struct bufferevent *bev, short error, void *ctx) {
 static void errorcb(struct bufferevent *bev, short error, void *ctx)
 {
 	struct otherside* con = ctx;
-    if (error & BEV_EVENT_EOF) {
-        /* connection has been closed, do any clean up here */
-        /* ... */
-    } else if (error & BEV_EVENT_ERROR) {
-        /* check errno to see what error occurred */
-        /* ... */
-    } else if (error & BEV_EVENT_TIMEOUT) {
+    if (error & BEV_EVENT_TIMEOUT) {
 		/* re-enable reading and writing to detect future timeouts */
         bufferevent_enable(bev, EV_READ|EV_WRITE);
 		if (con->bev) {
@@ -195,7 +189,6 @@ static void errorcb(struct bufferevent *bev, short error, void *ctx)
 			}
 		}
     }
-    /*bufferevent_setcb(bev, NULL, NULL, NULL, NULL); */
     bufferevent_free(bev);
 	if (con->bev) {
 		/*
@@ -208,7 +201,6 @@ static void errorcb(struct bufferevent *bev, short error, void *ctx)
         bufferevent_enable(con->bev, EV_READ|EV_WRITE);
 		con->pair->pair = NULL;
 		con->pair->bev = NULL;
-    	bufferevent_setcb(con->bev, do_pipe, NULL, errorcb, con->pair);
 	}
 	free(con);
 }
