@@ -25,6 +25,47 @@
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
+
+/**
+ * Every new connection goes through the following state machine/life cycle:
+ * 
+ * --- Initial "handshake" ---
+ * do_accept: new connection on EXT_PORT
+ *    create a new buffer event and start waiting for the first data or a
+ *    timeout
+ *
+ * initial_read: new connection send some data
+ *    check the first byte and create pipe to either SSH_PORT or SSL_PORT
+ *
+ * initial_errorcb: new connection failed or timed-out
+ *    in case of a timeout, create pipe to SSH_PORT
+ *    else close the buffer event
+ *
+ *
+ * --- back connection "handshake" ---
+ * create_pipe: 
+ *     open connection to either SSH_PORT or SSL_PORT
+ *
+ * event_back_connection: the back connection was established or failed
+ *     if everything went fine, connect the two buffer events in a 2-way pipe.
+ *     else close both buffer events to make sure the front connection is also
+ *     terminated 
+ *
+ * --- active pipe ---
+ *
+ * do_pipe: new data is available
+ *      if the other side is still active, copy data from source to target
+ *      else if other side is closed, just drain the buffer
+ *
+ * errorcb: something went wrong in one direction of the pipe
+ *      if there was a timeout in reading or writing and we are the first
+ *      direction of the pipe to notice this, do nothing.
+ *      if there was a timeout and the other direction also had a timeout, we
+ *      close our connection.
+ *      if there was any other error, we also close our connection.
+ *   
+ */
+
 static struct timeval TIMEOUT = { 60 * 15,  0 };
 static struct timeval SSH_TIMEOUT = { 3,  0 }; 
 
