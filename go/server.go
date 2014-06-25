@@ -142,6 +142,8 @@ func keepCopying(from, to *net.TCPConn, timedOut, otherTimedOut chan bool) {
 			log.Println("Received 0 bytes..",from)
 			continue
 		} else if n == currentSize {
+			// ideal case, we have a full buffer so we don't have to create a
+			// copy just to write it.
 			to.Write(b)
 			fullRounds++
 		} else {
@@ -150,6 +152,9 @@ func keepCopying(from, to *net.TCPConn, timedOut, otherTimedOut chan bool) {
 			to.Write(b2)
 		}
 		if (fullRounds == 10 && currentSize == RECV_BUF_LEN) {
+			// if our buffers are always full, and we still have a small buffer
+			// size, switch to a larger buffer size, since it appears we have a
+			// data intensive connection
 			currentSize = RECV_BUF_LEN_LARGE
 			b = make([]byte, currentSize)
 		}
