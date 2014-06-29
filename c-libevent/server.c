@@ -101,7 +101,7 @@ static void pipe_error(struct bufferevent *bev, short error, void *ctx)
 	struct otherside* con = ctx;
     if (error & BEV_EVENT_TIMEOUT) {
 		/* re-enable reading and writing to detect future timeouts */
-        bufferevent_enable(bev, EV_READ|EV_WRITE);
+        bufferevent_enable(bev, EV_READ);
 		if (con->bev) {
 			con->pair->other_timedout = 1;
 			if (!con->other_timedout) {
@@ -121,7 +121,7 @@ static void pipe_error(struct bufferevent *bev, short error, void *ctx)
 		 */
 		struct timeval ones = { 1, 0};
 		bufferevent_set_timeouts(con->bev, &ones, &ones);
-        bufferevent_enable(con->bev, EV_READ|EV_WRITE);
+        bufferevent_enable(con->bev, EV_READ);
 		con->pair->pair = NULL;
 		con->pair->bev = NULL;
 	}
@@ -154,14 +154,14 @@ static void back_connection(struct bufferevent *bev, short events, void *ctx)
 		set_tcp_no_delay(fd);
 
 
-    	bufferevent_enable(other_side, EV_READ|EV_WRITE);
+    	bufferevent_enable(other_side, EV_READ);
 		/* pipe already available data to backend */
 		bufferevent_read_buffer(other_side, bufferevent_get_output(bev));
         bufferevent_setcb(other_side, pipe_read, NULL, pipe_error, ctxs[0]);
 
         bufferevent_setcb(bev, pipe_read, NULL, pipe_error, ctxs[1]);
         bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
-        bufferevent_enable(bev, EV_READ|EV_WRITE);
+        bufferevent_enable(bev, EV_READ);
 
 		bufferevent_set_timeouts(bev, &TIMEOUT, NULL);
 		bufferevent_set_timeouts(other_side, &TIMEOUT, NULL);
@@ -215,7 +215,7 @@ static void initial_read(struct bufferevent *bev, void *ctx) {
 		}
 	}
     bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
-    bufferevent_disable(bev, EV_READ|EV_WRITE);
+    bufferevent_disable(bev, EV_READ);
 	bufferevent_set_timeouts(bev, NULL, NULL);
     bufferevent_setcb(bev, NULL, NULL, pipe_error, NULL);
 	create_pipe(base, bev, port);
@@ -249,7 +249,7 @@ static void initial_accept(evutil_socket_t listener, short UNUSED(event), void *
         bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
         bufferevent_setcb(bev, initial_read, NULL, initial_error, base);
         bufferevent_setwatermark(bev, EV_READ, 0, MAX_RECV_BUF);
-        bufferevent_enable(bev, EV_READ|EV_WRITE);
+        bufferevent_enable(bev, EV_READ);
 		bufferevent_set_timeouts(bev, &SSH_TIMEOUT, NULL);
     }
 }
@@ -298,5 +298,6 @@ int main(int UNUSED(c), char **v)
     event_add(listener_event, NULL);
 
     event_base_dispatch(base);
+	event_base_free(base);
     return 0;
 }
