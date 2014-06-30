@@ -1,4 +1,4 @@
-use std::io::{Listener, Acceptor, IoResult};
+use std::io::{Listener, Acceptor};
 use std::io::net::tcp::{TcpListener, TcpStream};
 
 static EXT_PORT: u16 = 8443;
@@ -6,11 +6,17 @@ static SSH_PORT: u16 = 22;
 static SSL_PORT: u16 = 9443;
 
 
-fn keep_copying(mut a: TcpStream, mut b: TcpStream) -> IoResult<uint> {
+fn keep_copying(mut a: TcpStream, mut b: TcpStream) {
 	let mut buf = [0u8,..1024];
 	loop {
-		let read = try!(a.read(buf));
-		try!(b.write(buf.slice_to(read)));
+		let read = match a.read(buf) {
+			Err(..) => { drop(a); return; },
+			Ok(r) => r
+		};
+		match b.write(buf.slice_to(read)) {
+			Err(..) => { drop(a); return; },
+			Ok(r) => r
+		};
 	}
 }
 
@@ -27,16 +33,10 @@ fn start_pipe(front: TcpStream, port: u16, header: u8) {
 	let back_copy = back.clone();
 
 	spawn(proc() {
-		match keep_copying(front, back) {
-			Err(..) => println!("Done"),
-			Ok(..) => println!("Unexpected..")
-		}
+		keep_copying(front, back);
 	});
 	spawn(proc() {
-		match keep_copying(back_copy, front_copy) {
-			Err(..) => println!("Done"),
-			Ok(..) => println!("Unexpected..")
-		}
+		keep_copying(back_copy, front_copy);
 	});
 }
 
