@@ -1,12 +1,12 @@
 use std::io::{Listener, Acceptor};
-use std::io::net::tcp::TcpListener;
+use std::io::net::tcp::{TcpListener, TcpStream};
 
 static EXT_PORT: int = 8443;
 static SSH_PORT: int = 22;
 static SSL_PORT: int = 9443;
 
 
-fn keep_copying(mut a,b: TcpStream) {
+fn keep_copying(mut a: TcpStream, mut b: TcpStream) {
 	loop {
 		let read = try!(a.read(buf));
 		b.write(buf.slice_to(read));
