@@ -20,14 +20,16 @@ fn keep_copying(mut a: TcpStream, mut b: TcpStream) {
 	}
 }
 
-fn start_pipe(front: TcpStream, port: u16, header: u8) {
+fn start_pipe(front: TcpStream, port: u16, header: Option<u8>) {
 	let mut back = match TcpStream::connect("127.0.0.1", port) {
 		Err(e) => { println!("Error connecting: {}", e); return; },
 		Ok(b) => b
 	};
-	match back.write_u8(header) {
-		Err(e) => { println!("Error writing first byte: {}", e); return }
-		Ok(..) => ()
+	if header.is_some() {
+		match back.write_u8(header.unwrap()) {
+			Err(e) => { println!("Error writing first byte: {}", e); return }
+			Ok(..) => ()
+		}
 	}
 	let front_copy = front.clone();
 	let back_copy = back.clone();
@@ -41,12 +43,11 @@ fn start_pipe(front: TcpStream, port: u16, header: u8) {
 }
 
 fn handle_new_connection(mut stream: TcpStream) {
-	//stream.set_read_timeout(2000);
-	let header = match stream.read_byte() {
-		Err(..) => -1,
-		Ok(b) => b
+	let header: Option<u8> = match stream.read_byte() {
+		Err(..) => None,
+		Ok(b) => Some(b)
 	};
-	if header == 22 || header == 128 {
+	if header.is_some() && header.unwrap() == 22 || header.unwrap() == 128 {
 		start_pipe(stream, SSL_PORT, header);
 	}
 	else {
