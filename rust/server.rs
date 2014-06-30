@@ -56,7 +56,7 @@ fn handle_new_connection(mut stream: TcpStream) {
 		Err(..) => None,
 		Ok(b) => Some(b)
 	};
-	if header.is_some() && header.unwrap() == 22 || header.unwrap() == 128 {
+	if header.is_some() && (header.unwrap() == 22 || header.unwrap() == 128) {
 		start_pipe(stream, SSL_PORT, header);
 	}
 	else {
