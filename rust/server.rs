@@ -15,7 +15,7 @@ fn keep_copying(mut a: TcpStream, mut b: TcpStream) {
 		};
 		match b.write(buf.slice_to(read)) {
 			Err(..) => { drop(a); return; },
-			Ok(r) => r
+			Ok(..) => ()
 		};
 	}
 }
@@ -59,7 +59,7 @@ fn main() {
     println!("listening started, ready to accept");
     for stream in acceptor.incoming() {
 		match stream {
-			Err(e) => { /* connection failed */ }
+			Err(e) => println!("Strange connection broken: {}", e),
 			Ok(stream) => spawn(proc() {
 					// connection succeeded
 					handle_new_connection(stream);
