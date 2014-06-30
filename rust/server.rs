@@ -22,12 +22,21 @@ fn keep_copying(mut a: TcpStream, mut b: TcpStream) {
 
 fn start_pipe(front: TcpStream, port: u16, header: Option<u8>) {
 	let mut back = match TcpStream::connect("127.0.0.1", port) {
-		Err(e) => { println!("Error connecting: {}", e); return; },
+		Err(e) => { 
+			println!("Error connecting: {}", e); 
+			drop(front);
+			return;
+		},
 		Ok(b) => b
 	};
 	if header.is_some() {
 		match back.write_u8(header.unwrap()) {
-			Err(e) => { println!("Error writing first byte: {}", e); return }
+			Err(e) => { 
+				println!("Error writing first byte: {}", e); 
+				drop(back); 
+				drop(front); 
+				return;
+			},
 			Ok(..) => ()
 		}
 	}
